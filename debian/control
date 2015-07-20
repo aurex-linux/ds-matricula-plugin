@@ -1,0 +1,39 @@
+Source:  ds-matricula-plugin
+Section: admin
+Priority: optional
+Maintainer: Luis Antonio Garcia Gisbert <luisgg@gmail.com>
+Build-Depends: debhelper (>= 7.0), python-all, dh-python, python-setuptools, python3-all, python3-setuptools
+Standards-Version: 3.9.5
+
+Package: matricula-common-scripts
+Architecture: all
+Depends: ${misc:Depends}, mysql-client, ldap-utils, smbldap-tools
+Recommends: mysql-server, slapd
+Description: scripts to manage users in CIPFP Ausias March environment
+ Shell scripts for user managment in CIPFP Ausias March environment
+
+Package: python-ds-matricula-plugin
+Architecture: all
+Depends: ${misc:Depends}, ${python:Depends}, python (>= 2.7), matricula-common-scripts, python-datastore, python-sh
+Recommends: datastore-server-ng
+Description: datastore plugin to manage users in CIPFP Ausias March environment
+ This package installs a set of shell scripts to manage the state of students:
+ add, delete, ... using ldap and mysql command line tools and smbldaptools utils.
+ In addition, the package includes a python wrapper around this scripts to
+ integrate the utilities as a datastore plugin, in order to provide full
+ access to the student's enroll process into datastore-server xmlrpc api 
+ .
+ This is the Python 2 version of the package
+
+Package: python3-ds-matricula-plugin
+Architecture: all
+Depends: ${misc:Depends}, ${python:Depends}, python3, matricula-common-scripts, python3-datastore, python3-sh
+Recommends: datastore-server-ng
+Description: datastore plugin to manage users in CIPFP Ausias March environment
+ This package installs a set of shell scripts to manage the state of students:
+ add, delete, ... using ldap and mysql command line tools and smbldaptools utils.
+ In addition, the package includes a python wrapper around this scripts to
+ integrate the utilities as a datastore plugin, in order to provide full
+ access to the student's enroll process into datastore-server xmlrpc api 
+ .
+ This is the Python 3 version of the package
