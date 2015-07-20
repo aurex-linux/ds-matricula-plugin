@@ -1,0 +1,37 @@
+#!/bin/bash
+
+. /usr/share/ds-matricula-plugin/matricula-common-scripts/ausias-user-manager-common
+
+die() {
+	echo "$1" >&2
+	exit 1
+}
+
+CR8_DIR="/srv/carnets/alumnos"
+LOG_FILE="${CR8_DIR}/CR8-PRINT.log"
+# formato log: fecha, DNI, NIA, GRUPO, FICHERO_CSV, NOMBRE_COMPLETO
+#listado_alumnos.csv=listado completo de todos los alumnos
+#lista_imprimible_GRUPO=listado de alumnos con foto y sin carnet
+ALL_STUDENTS="${CR8_DIR}/LISTADO_ALUMNOS.csv"
+GRP_STUDENTS="${CR8_DIR}/LISTA_IMPRIMIBLE_"
+
+# importa a BD
+IMPORT_SQL="use itaca; delete from carnet_temp; load data local infile '$LOG_FILE' into table carnet_temp FIELDS TERMINATED BY ',' ENCLOSED BY '\"' LINES TERMINATED BY '\r\n';"
+mysql --local-infile=1 -N -B -e "$IMPORT_SQL"
+# 
+# marca carnets impresos
+mysql -N -B -e "use itaca; update alumnos, carnet_temp set alumnos.carnet_impreso = '1' , alumnos.fecha_carnet = carnet_temp.FECHA where alumnos.DNI_NORM = carnet_temp.DNI;"
+
+
+# genera csv completo
+
+mysql -N -B --column-names -e "USE itaca; SELECT * FROM alumnos WHERE borrado = '0' ORDER by gacadcod, apellido1, apellido2, nombre;" |sed -e 's%^%"%;s%\t%","%g;s%$%"%' |iconv -f UTF-8 -t ISO-8859-15 > "$ALL_STUDENTS"
+
+# por grupos
+mysql -N -B -e "use itaca; SELECT codigo from grupos;" |while read gcode; do
+	gdesc="$(mysql -N -B -e "use itaca; SELECT descripcion from grupos where codigo = '$gcode';" |sed -e "s%^.\{3\}%_%;s% %.%g" |tr "[:lower:]" "[:upper:]")"
+	gfile="${GRP_STUDENTS}${gcode}${gdesc}.csv"
+	mysql -N -B --column-names -e "USE itaca; SELECT * FROM alumnos WHERE borrado = '0' and carnet_impreso = '0' and foto != 'NOBODY.jpg' and gacadcod = '$gcode' ORDER by apellido1, apellido2, nombre;" |sed -e 's%^%"%;s%\t%","%g;s%$%"%' |iconv -f UTF-8 -t ISO-8859-15 > "$gfile"
+done
+
+exit 0

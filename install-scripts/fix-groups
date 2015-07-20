@@ -1,0 +1,53 @@
+#!/bin/sh
+die() {
+	echo "$1" >&2
+	[ -z "$TMP_FILE" ] || rm -f "$TMP_FILE"
+	[ -z "$TMP_FILE2" ] || rm -f "$TMP_FILE2"
+	[ -z "$TMP_FILE3" ] || rm -f "$TMP_FILE3"
+	exit 1
+}
+
+echo "WARNING!!!: This script updates groups in ldap server"
+echo "¿Do you want to proceed? (Write 'YES' in uppercase to continue)"
+read a
+[ "$a" = "YES" ] || die "Aborted due to user input"
+[ $(id -u) -eq 0 ] || die "You must be root to run this script"
+
+
+TMP_FILE="$(tempfile)"
+TMP_FILE2="$(tempfile)"
+TMP_FILE3="$(tempfile)"
+
+# get list of 'old fashioned' groups
+echo "password de cn=admin,dc=centro,dc=com"
+#ldapsearch -LLL -b ou=grupos,dc=centro,dc=com -D cn=admin,dc=centro,dc=com -W "(&(cn=GrpAc_*)(ObjectClass=posixGroup))" dn |sed "s%dn:[[:blank:]]cn=*%%;s%,.*$%%;/^$/d" > $TMP_FILE
+ldapsearch -LLL -b ou=grupos,dc=centro,dc=com -D cn=admin,dc=centro,dc=com -W "(&(cn=GrpAc_*)(ObjectClass=posixGroup))" dn |sed "s%dn:[[:blank:]]%%;/^$/d" > $TMP_FILE
+
+# delete every group:
+echo "password de cn=admin,dc=centro,dc=com"
+ldapdelete -D cn=admin,dc=centro,dc=com -W -f $TMP_FILE
+
+# get list of login/groups
+echo "password de mysql"
+mysql -u root -p -N -B -e "use itaca; SELECT login, gacadcod FROM alumnos WHERE borrado='0'" > $TMP_FILE2 
+
+# get list of groups
+sed -e "s%^.*[[:blank:]]\+%%" $TMP_FILE2 |sort -u > $TMP_FILE3
+
+# try to add every group, if the group already exists, remove all members
+cat $TMP_FILE3 | while read g; do
+	G="al_${g}"
+	if ! smbldap-groupadd -a "$G" ; then
+		smbldap-groupmod -x "$(getent group "$G" |sed -e "s%^.*:%%")" "$G" || true
+	fi
+	# get list of members
+	G_USERS="$(sed -ne "/[[:blank:]]${G}$/{s%[[:blank:]].*$%%;p}" "$TMP_FILE2" |tr "\n" ",")"
+	G_USERS="${G_USERS%,}"
+	# if the list is not empty, add users to group
+	[ -z "$G_USERS" ] || smbldap-groupmod -m "$G_USERS" "$G" || true
+done
+
+rm -f "$TMP_FILE"
+rm -f "$TMP_FILE2"
+rm -f "$TMP_FILE3"
+

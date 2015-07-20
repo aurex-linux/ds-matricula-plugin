@@ -1,0 +1,145 @@
+#!/bin/bash
+die() {
+	echo "$1" >&2
+	rm -f "$TMP_FILE"
+	rm -f "$TMP_FILE2"
+	rm -f "$TMP_FILE3"
+	rm -f "$TMP_FILE4"
+	exit 1
+}
+
+strip_dni(){
+	# remove letters and select the last 8 chars
+	echo "$1" |sed "s%[a-zA-Z]%%g;s%^.*\(.\{8\}\)$%\1%"
+}
+
+gen_login(){
+	DNI="$1"
+	if echo "$DNI" |grep -q "^[a-zA-Z]0"; then
+		login="0${DNI:0:1}${DNI:2:8}"
+	else
+		login="$DNI"
+	fi
+	echo "a${login}" |tr "[:upper:]" "[:lower:]"
+}
+
+echo "WARNING!!!: This script adds to ldap server all users tagged as 'new' ('alta = 1') in mySQL itaca.alumnos table"
+echo "¿Do you want to proceed? (Write 'YES' in uppercase to continue)"
+read a
+[ "$a" = "YES" ] || die "Aborted due to user input"
+
+
+[ $(id -u) -eq 0 ] || die "You must be root to run this script"
+ 
+TMP_FILE="$(tempfile)"
+TMP_FILE2="$(tempfile)"
+#TMP_FILE2="/tmp/alta-correcta.txt"
+TMP_FILE3="$(tempfile)"
+#TMP_FILE3="/tmp/altas-ya-en-ldap.xml"
+TMP_FILE4="$(tempfile)"
+#TMP_FILE4="/tmp/alta-erronea.txt"
+
+# 2. añadir alumnos nuevos de itaca
+# INSERT INTO alumnos ( nombre, apellido1, apellido2, gacadcod, nac_fecha, sexo, NIA, DNI_NORM, alta )
+# SELECT Nombre as nombre, Apellido1 as apellido1, Apellido2 as apellido2, Grupo as gacadcod, `Fecha Nacimiento` as nac_fecha,Sexo as sexo,NIA as NIA,dniok as DNI_NORM, '1' as alta FROM `itaca_current` where dniok not in (select DNI_NORM from alumnos)
+
+
+echo "Enter mySQL root password:"
+mysql -u root -p -N -B -e "use itaca; select nombre, apellido1, apellido2, gacadcod, NIA, DNI_NORM from alumnos where alta='1';" > "$TMP_FILE"
+
+[ -s "$TMP_FILE" ] || die "Error generating file from mysql"
+
+cat "$TMP_FILE" |while read l; do
+	L0="$(echo "$l"|tr "\t" ",")"
+	nombre="${L0%%,*}"
+	L="${L0#*,}"
+	ape1="${L%%,*}"
+        L="${L#*,}"
+	ape2="${L%%,*}"
+        L="${L#*,}"
+	grupo="${L%%,*}"
+        L="${L#*,}"
+	nia="${L%%,*}"
+        L="${L#*,}"
+	dni="${L%%,*}"
+	if [ -z "$dni" ] || [ "$dni" = "NUL" ]; then
+		echo "Error, invalid DNI: $L0"
+	else
+		echo "DNI: $dni"
+		login="$(gen_login "${dni}")"
+		echo "login: $login"
+		if [ -z "$nia" ] || [ "$nia" = "NUL" ]; then
+			initpass="$(strip_dni "${dni}")"
+			employee="6${initpass}000"
+		else
+			initpass="${nia}"
+			employee="9${initpass}000"
+		fi
+		ape_clean="$(echo "$ape1 $ape2" |sed -e "s%ñ%ny%g;s%Ñ%NY%g" |iconv --to-code ASCII//TRANSLIT |sed -e "s%^[[:blank:]]*%%;s%[[:blank:]]*$%%")"
+		nom_clean="$(echo "$nombre" |sed -e "s%ñ%ny%g;s%Ñ%NY%g" |iconv --to-code ASCII//TRANSLIT |sed -e "s%^[[:blank:]]*%%;s%[[:blank:]]*$%%")"
+#	note: remove leading or trailing spaces because it forces smblap-tools to encode gecos in base64
+#             may be an awfull bug ???? (report to sto ;-) )
+		gecos="$ape_clean  $nom_clean"
+		echo "Adding user: $gecos"
+#		smbldap-useradd -a -g ALUMNOS -d "/datos/usuarios/alumnos/$login" -D "S:" -G "Domain Users" -o "ou=usuarios,dc=centro,dc=com" -c "$gecos"  || true
+		rc=0
+		echo "$initpass" |smbldap-useradd -a -g ALUMNOS -d "/datos/usuarios/alumnos/${login}" -D "S:" -G "Domain Users" -c "$gecos" -S "$ape_clean" -N "$nom_clean" -Z employeeNumber=$employee -P  -p "${login}" || rc=$?
+		if [ $rc -eq 0 ] ; then
+			echo "Correcto"
+			echo ${login} >> "$TMP_FILE2"
+		else
+			echo "Error"
+			echo ${login} >> "$TMP_FILE4"
+		fi
+#FUTURO: create homedir: se puede usar -m (requiere haber montado desde satanas)
+
+	fi
+done
+
+# generar fichero con id 
+
+SED_RULE="/^$/d;/^dn:/s%^.*$%\n<alumno%;"
+
+ATTRIB_LIST="uid uidNumber employeeNumber sambaSID gidNumber sambaPrimaryGroupSID gecos"
+FIELD_LIST=""
+for f in $ATTRIB_LIST ; do
+	case "$f" in
+		uid)
+			F="login"
+			;;
+		gecos)
+			F="nombre_comp"
+			;;
+		*)
+			F="$f"
+			;;
+	esac
+	SED_RULE="${SED_RULE}/^$f:/{s%^$f: % $F=\"%;s%\$%\"%};"
+	FIELD_LIST="$FIELD_LIST $F"
+
+done
+
+#get dni from login
+SED_RULE="${SED_RULE}/^[[:blank:]]*login=/{p;s%login%DNI_NORM%;s%=\".%=\"%}"
+
+echo "Enter joindomain password:"
+ldapsearch -LLL -x -b "dc=centro,dc=com" -D "uid=joindomain,ou=usuarios,dc=centro,dc=com" -W -f "$TMP_FILE2" '(&(objectClass=posixAccount)(uid=%s))' $ATTRIB_LIST | sed -e "$SED_RULE" |sed '1d;/^$/s%^%/>%;$a/>' |sed -e "/DNI_NORM=/{s%\(=.*\)$%\U\1%;/0[A-Z][[:digit:]]/s%0\([A-Z]\)\([[:digit:]]\)%\10\2%}" > "$TMP_FILE3"
+# last sed is to normalize DNI
+
+
+# import to mysql ...
+IMPORT_SQL="use itaca; delete from ldap_temp; load xml local infile '$TMP_FILE3' into table ldap_temp rows identified by '<alumno>';"
+
+UPDATE_SQL="update alumnos, ldap_temp set"
+for f in $FIELD_LIST ; do
+	UPDATE_SQL="$UPDATE_SQL alumnos.$f=ldap_temp.$f,"
+done
+UPDATE_SQL="$UPDATE_SQL alumnos.alta='0' where alumnos.DNI_NORM=ldap_temp.DNI_NORM;"
+echo "Enter mySQL root password:"
+mysql --local-infile=1 -u root -p -N -B -e "$IMPORT_SQL $UPDATE_SQL"
+
+rm -f "$TMP_FILE"
+rm -f "$TMP_FILE2"
+rm -f "$TMP_FILE3"
+rm -f "$TMP_FILE4"
+

@@ -1,0 +1,28 @@
+#!/bin/sh
+TMP_FILE2=/tmp/luis
+SED_RULE="/^$/d;/^dn:/s%^.*$%\n<alumno%;"
+
+ATTRIB_LIST="uid uidNumber employeeNumber sambaSID gidNumber sambaPrimaryGroupSID gecos"
+for f in $ATTRIB_LIST ; do
+	case "$f" in
+		uid)
+			F="login"
+			;;
+		gecos) 
+                        F="nombre_comp"
+                        ;;
+
+		*)
+			F="$f"
+			;;
+	esac
+	SED_RULE="${SED_RULE}/^$f:/{s%^$f: % $F=\"%;s%\$%\"%};"
+
+done
+
+SED_RULE="${SED_RULE}/^[[:blank:]]*login=/{p;s%login%DNI_NORM%;s%=\".%=\"%}"
+
+# get ldif
+#TMP_FILE="$(tempfile)"
+ldapsearch -LLL -x -b "dc=centro,dc=com" -D "uid=joindomain,ou=usuarios,dc=centro,dc=com" -W -f "$TMP_FILE2" '(&(objectClass=posixAccount)(uid=%s))' $ATTRIB_LIST | sed -e "$SED_RULE" |sed '1d;/^$/s%^%/>%;$a/>'
+ 

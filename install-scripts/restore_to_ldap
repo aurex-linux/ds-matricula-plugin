@@ -1,0 +1,92 @@
+#!/bin/sh
+die() {
+	echo "$1" >&2
+	exit 1
+}
+
+usage(){
+	die "Usage: $0 <LOGIN>"
+}
+
+strip_dni(){
+        # remove letters and select the last 8 chars
+        echo "$1" |sed "s%[a-zA-Z]%%g;s%^.*\(.\{8\}\)$%\1%"
+}
+
+
+get_from_db(){
+	DB_FIELD="$1"
+	mysql -N -B -e "use itaca; select $DB_FIELD from alumnos where login='$login'"
+}
+
+# main
+# ----
+[ $(id -u) -eq 0 ] || die "You must be root to run this script"
+
+# check configuration files
+for f in /etc/smbldap-tools/smbldap_bind.conf  /etc/smbldap-tools/smbldap.conf; do
+	[ -r "$f" ] || die "Missing configuration file $f"
+	. $f
+done
+[ -r /root/.my.cnf ] || die "Missing mysql configurarion in /root/.my.cnf"
+export HOME=/root
+
+# test data
+login="$1"
+[ "$login" ] || usage
+! getent passwd "$login" >/dev/null || die "Alumno $login already exist in LDAP"
+uidnumber="$(get_from_db "uidNumber")"
+[ "$uidnumber" ] || die "Alumno $login not exists in mySQL"
+
+gecos="$(echo "$(get_from_db "apellido1") $(get_from_db "apellido2")  $(get_from_db "nombre")" |sed -e "s%ñ%ny%g;s%Ñ%NY%g" |iconv --to-code ASCII//TRANSLIT |sed -e "s%^[[:blank:]]*%%;s%[[:blank:]]*$%%")"
+alugid="$(getent group ALUMNOS |cut -d : -f 3)"
+
+LDIF="$(tempfile)"
+
+cat << EOF > "$LDIF"
+dn: uid=$login,$usersdn
+cn: $gecos
+displayName: $gecos
+employeeNumber: $(get_from_db "employeeNumber")
+gecos: $gecos
+gidNumber: $alugid
+givenName: $login
+homeDirectory: /datos/usuarios/alumnos/$login
+loginShell: /bin/bash
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+objectClass: inetOrgPerson
+objectClass: sambaSamAccount
+sambaHomeDrive: $userHomeDrive
+sambaKickoffTime: 2147483647
+sambaLogoffTime: 2147483647
+sambaLogonTime: 0
+sambaPrimaryGroupSID: $(get_from_db "sambaPrimaryGroupSID")
+sambaPwdCanChange: 0
+sambaSID: $(get_from_db "sambaSID")
+sn: $login
+uid: $login
+uidNumber: $uidnumber
+sambaAcctFlags: [U]
+sambaPwdLastSet: 1411550710
+sambaPwdMustChange: 1419326710
+shadowLastChange: 16337
+shadowMax: 90
+EOF
+
+rc=0
+ldapadd -x -D "$masterDN" -w "$masterPw" -h localhost -f $LDIF || rc=$?
+
+rm -f "$LDIF"
+[ $rc -eq 0 ] || die "Error restoring $login"
+echo "$login restored to ldap with idnumber $uidnumber ($gecos)"
+INIT_PASS="$(get_from_db "NIA")"
+[ "$INIT_PASS" ] || INIT_PASS="$login"
+echo "${INIT_PASS}\n${INIT_PASS}" |smbldap-passwd "$login" || die "Error setting password"
+echo "Password set to '$INIT_PASS'"
+
+exit 0
+

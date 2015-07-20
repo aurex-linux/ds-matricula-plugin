@@ -14,7 +14,7 @@ Description: scripts to manage users in CIPFP Ausias March environment
 
 Package: python-ds-matricula-plugin
 Architecture: all
-Depends: ${misc:Depends}, ${python:Depends}, python (>= 2.7), matricula-common-scripts, python-datastore, python-sh
+Depends: ${misc:Depends}, ${python:Depends}, python (>= 2.7), matricula-common-scripts, python-datastore (>= 1.1), python-sh
 Recommends: datastore-server-ng
 Description: datastore plugin to manage users in CIPFP Ausias March environment
  This package installs a set of shell scripts to manage the state of students:
@@ -27,7 +27,7 @@ Description: datastore plugin to manage users in CIPFP Ausias March environment
 
 Package: python3-ds-matricula-plugin
 Architecture: all
-Depends: ${misc:Depends}, ${python:Depends}, python3, matricula-common-scripts, python3-datastore, python3-sh
+Depends: ${misc:Depends}, ${python:Depends}, python3, matricula-common-scripts, python3-datastore (>= 1.1), python3-sh
 Recommends: datastore-server-ng
 Description: datastore plugin to manage users in CIPFP Ausias March environment
  This package installs a set of shell scripts to manage the state of students:

@@ -1,0 +1,9 @@
+#!/bin/sh
+strip_chars(){
+	echo "$1" |sed -e "s%ñ%ny%g;s%Ñ%NY%g" |iconv --to-code ASCII//TRANSLIT |sed -e "s%^[[:blank:]]*%%;s%[[:blank:]]*$%%"
+}
+
+cat - |while read l ; do
+	strip_chars "$l"
+done
+exit 0

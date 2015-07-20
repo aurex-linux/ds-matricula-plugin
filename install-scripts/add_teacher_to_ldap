@@ -1,0 +1,84 @@
+#!/bin/sh
+die() {
+	echo "$1" >&2
+	exit 1
+}
+
+usage(){
+	die "Usage: $0 <LOGIN>"
+}
+
+strip_dni(){
+        # remove letters and select the last 8 chars
+        echo "$1" |sed "s%[a-zA-Z]%%g;s%^.*\(.\{8\}\)$%\1%"
+}
+
+
+get_from_db(){
+	DB_FIELD="$1"
+	mysql -N -B -e "use itaca; select $DB_FIELD from profesores where login='$login'"
+}
+
+# main
+# ----
+[ $(id -u) -eq 0 ] || die "You must be root to run this script"
+
+# check configuration files
+for f in /etc/smbldap-tools/smbldap_bind.conf  /etc/smbldap-tools/smbldap.conf; do
+	[ -r "$f" ] || die "Missing configuration file $f"
+	. $f
+done
+[ -r /root/.my.cnf ] || die "Missing mysql configurarion in /root/.my.cnf"
+export HOME=/root
+
+# test data
+login="$1"
+[ "$login" ] || usage
+! getent passwd "$login" >/dev/null || die "Profesor $login already exist in LDAP"
+
+dni="$(get_from_db "dni")"
+[ "$dni" ] || die "Profesor $login not exists in mySQL"
+initpass="$(strip_dni "${dni}")"
+#echo "dni normalizado $initpass"
+employee="${initpass}000"
+ 
+ape1="$(get_from_db "apellido1")"
+ape2="$(get_from_db "apellido2")"
+nombre="$(get_from_db "nombre")"
+ape_clean="$(echo "$ape1 $ape2" |sed -e "s%ñ%ny%g;s%Ñ%NY%g" |iconv --to-code ASCII//TRANSLIT |sed -e "s%^[[:blank:]]*%%;s%[[:blank:]]*$%%")"
+nom_clean="$(echo "$nombre" |sed -e "s%ñ%ny%g;s%Ñ%NY%g" |iconv --to-code ASCII//TRANSLIT |sed -e "s%^[[:blank:]]*%%;s%[[:blank:]]*$%%")"
+gecos="$ape_clean  $nom_clean"
+echo "Adding user: $gecos and password: $initpass"
+
+
+idgroup="$(get_from_db "familia")"
+case "$idgroup" in
+   "SAN") group="Dp_SANITAT"
+   ;;
+   "INF") group="Dp_INFORMATICA"
+   ;;
+   "ADM") group="Dp_ADMINISTRACIO"
+   ;;
+   "COM") group="Dp_COMERC_I_MARKETING"
+   ;;
+   "IDI") group="Dp_IDIOMES"
+   ;;
+   "FOL") group="Dp_FOL"
+   ;;
+   "ORI") group="Dp_ORIENTACIO"
+   ;;
+esac
+
+echo "$group"
+
+uid="$(get_from_db "uid")"
+
+rc=0
+echo "$initpass" |smbldap-useradd -a -g PROFESORES -d "/datos/usuarios/profesores/${login}" -D "S:" -G "Domain Users,$group" -c "$gecos" -S "$ape_clean" -N "$nom_clean" -M "${login}@ausiasmarch.net" -u "${uid}" -Z employeeNumber=$employee -P  -p "${login}" || rc=$?
+#echo smbldap-useradd -a -g PROFESORES -d "/datos/usuarios/profesores/${login}" -D "S:" -G "Domain Users" -c "$gecos" -S "$ape_clean" -N "$nom_clean" -Z employeeNumber=$employee -P  -p "${login}"
+if [ $rc -eq 0 ] ; then
+   echo "Correcto"
+else
+   echo "Error"
+fi
+#FUTURO: create homedir: se puede usar -m (requiere haber montado desde satanas)

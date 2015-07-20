@@ -1,0 +1,58 @@
+#!/bin/sh
+
+
+# source common files and do basic checkings
+
+. /usr/share/ds-matricula-plugin/matricula-common-scripts/ausias-user-manager-common
+
+# common funcs
+usage(){
+	die "$0 <CSV_FILE>"
+}
+
+# more checks
+
+# user_confirmation "Blah Blah"
+
+[ "$1" ] || usage
+CSV_FILE0="$1"
+[ -r "$CSV_FILE0" ] || die "Error reading $CSV_FILE"
+
+# convert to utf-8
+CSV_FILE="$(tempfile)"
+iconv -f ISO-8859-15 -t UTF-8 "$CSV_FILE0" |sed -e "1{s%[[:blank:]]%%g;s%\.%%g;s%[ñÑ]%n%g;s%.*%\L&%}" > "$CSV_FILE"
+
+#convert to xml
+
+TMP_XML="$(tempfile)"
+/usr/share/ds-matricula-plugin/matricula-common-scripts/csv2xml.py "$CSV_FILE" "$TMP_XML"
+
+# import to itaca DB
+mysql --local-infile=1 -N -B -e "use itaca; truncate table itaca_temp; load xml local infile '$TMP_XML' into table itaca_temp character set utf8;"
+
+TMP_SQL="$(tempfile)"
+
+cat << EOF > $TMP_SQL
+USE itaca;
+#ALTER TABLE itaca_temp ADD dniok VARCHAR(10) AFTER documento;
+#Copiar el valor del campo
+UPDATE itaca_temp SET dniok=documento WHERE 1;
+#Quitar los guiones
+UPDATE itaca_temp SET dniok = concat( LEFT( dniok, LOCATE( '-', dniok ) -1 ) , RIGHT( dniok, LENGTH( dniok ) - LOCATE( '-', dniok ) ) ) WHERE dniok LIKE '%-%';
+#quitar el segundos guión si lo hubiera
+UPDATE itaca_temp SET dniok=concat(LEFT(dniok,LOCATE('-',dniok)-1),RIGHT(dniok,LENGTH(dniok)-LOCATE('-',dniok)))  WHERE dniok LIKE '%-%';
+# Cambias 0X y 0Y por X0 e Y0
+UPDATE itaca_temp SET  dniok=CONCAT(MID(dniok,2,1),'0',RIGHT(dniok,LENGTH(dniok)-2)) WHERE LEFT(dniok,2) IN ('0X','0Y');
+# Insertar 0 en aquellos NIE que no se ha puesto
+UPDATE itaca_temp SET  dniok=CONCAT(LEFT(dniok,1),'0',RIGHT(dniok,LENGTH(dniok)-1)) WHERE LENGTH(dniok) < 10 AND LEFT(dniok,1) IN ('X','Y');
+#Normalizar con ceros a la derecha
+UPDATE itaca_temp SET dniok= LPAD(dniok,10,'0') WHERE LENGTH(dniok) < 10;
+#Encontrar sin letra final
+SELECT documento dniok FROM itaca_temp WHERE RIGHT(documento,1) BETWEEN '0' AND '9'; 
+EOF
+
+mysql -N -B < $TMP_SQL
+
+rm -f $TMP_SQL $TMP_XML $CSV_FILE
+
+exit 0
