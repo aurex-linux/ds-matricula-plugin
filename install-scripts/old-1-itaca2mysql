@@ -7,7 +7,7 @@
 
 # common funcs
 usage(){
-	die "$0 <XML_FILE>"
+	die "$0 <CSV_FILE>"
 }
 
 # more checks
@@ -15,17 +15,17 @@ usage(){
 # user_confirmation "Blah Blah"
 
 [ "$1" ] || usage
-TMP_XML="$1"
-[ -r "$TMP_XML" ] || die "Error reading $TMP_XML"
+CSV_FILE0="$1"
+[ -r "$CSV_FILE0" ] || die "Error reading $CSV_FILE"
 
 # convert to utf-8
-#CSV_FILE="$(tempfile)"
-#iconv -f ISO-8859-15 -t UTF-8 "$CSV_FILE0" |sed -e "1{s%[[:blank:]]%%g;s%\.%%g;s%[ñÑ]%n%g;s%.*%\L&%}" > "$CSV_FILE"
+CSV_FILE="$(tempfile)"
+iconv -f ISO-8859-15 -t UTF-8 "$CSV_FILE0" |sed -e "1{s%[[:blank:]]%%g;s%\.%%g;s%[ñÑ]%n%g;s%.*%\L&%}" > "$CSV_FILE"
 
 #convert to xml
 
-#TMP_XML="$(tempfile)"
-#/usr/share/ds-matricula-plugin/matricula-common-scripts/csv2xml.py "$CSV_FILE" "$TMP_XML"
+TMP_XML="$(tempfile)"
+/usr/share/ds-matricula-plugin/matricula-common-scripts/csv2xml.py "$CSV_FILE" "$TMP_XML"
 
 # import to itaca DB
 mysql --local-infile=1 -N -B -e "use itaca; truncate table itaca_temp; load xml local infile '$TMP_XML' into table itaca_temp character set utf8;"
@@ -53,6 +53,6 @@ EOF
 
 mysql -N -B < $TMP_SQL
 
-rm -f $TMP_SQL
+rm -f $TMP_SQL $TMP_XML $CSV_FILE
 
 exit 0
