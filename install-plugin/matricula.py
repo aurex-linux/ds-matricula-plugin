@@ -5,28 +5,6 @@ import tempfile
 import os
 
 class matricula(datastore.datastore_plugin):
-	def import_csv(self, username, userpass, filestream):
-		retCode = True
-		import_xml_command = sh.Command("/usr/share/ds-matricula-plugin/matricula-common-scripts/1-itaca2mysql")
-		# set a temporary filename
-		TMP_CSV = tempfile.mkstemp()[1]
-		TMP_CSV2 = tempfile.mkstemp()[1]
-		if self._put_file(TMP_CSV, filestream):
-			TMP_XML = tempfile.mkstemp()[1]
-			sh.sed(sh.iconv("-f", "ISO-8859-15", "-t", "UTF-8", TMP_CSV), "-e", "1{s%[[:blank:]]%%g;s%\.%%g;s%[ñÑ]%n%g;s%.*%\L&%}", _out=TMP_CSV2)
-
-			if self._csv2xml(TMP_CSV2, TMP_XML):
-				try:
-					import_xml_command(TMP_XML)
-				except ErrorReturnCode:
-					# some error happened
-					retCode = False
-
-			os.remove(TMP_XML)
-		os.remove(TMP_CSV)
-		os.remove(TMP_CSV2)
-		return retCode
-
 	def _csv2xml(self, csvFile, xmlFile):
 		# FB - 201010107
 		# First row of the csv file must be header!
@@ -61,4 +39,46 @@ class matricula(datastore.datastore_plugin):
 		except:
 			return False
 		return True
+
+	def import_csv(self, username, userpass, filestream):
+		retCode = True
+		import_xml_command = sh.Command("/usr/share/ds-matricula-plugin/matricula-common-scripts/1-itaca2mysql")
+		# set a temporary filename
+		TMP_CSV = tempfile.mkstemp()[1]
+		TMP_CSV2 = tempfile.mkstemp()[1]
+		if self._put_file(TMP_CSV, filestream):
+			TMP_XML = tempfile.mkstemp()[1]
+			sh.sed(sh.iconv("-f", "ISO-8859-15", "-t", "UTF-8", TMP_CSV), "-e", "1{s%[[:blank:]]%%g;s%\.%%g;s%[ñÑ]%n%g;s%.*%\L&%}", _out=TMP_CSV2)
+
+			if self._csv2xml(TMP_CSV2, TMP_XML):
+				try:
+					import_xml_command(TMP_XML)
+				except ErrorReturnCode:
+					# some error happened
+					retCode = False
+
+			os.remove(TMP_XML)
+		os.remove(TMP_CSV)
+		os.remove(TMP_CSV2)
+		return retCode
+
+	def delete_from_ldap(self):
+		retCode = True
+		delete_from_ldap_command = sh.Command("/usr/share/ds-matricula-plugin/matricula-common-scripts/2-delete_from_ldap")
+		try:
+			delete_from_ldap_command("-y")
+		except ErrorReturnCode:
+			# some error happened
+			retCode = False
+		return retCode
+
+	def add_to_ldap(self):
+		retCode = True
+		add_to_ldap_command = sh.Command("/usr/share/ds-matricula-plugin/matricula-common-scripts/3-add_to_ldap")
+		try:
+			add_to_ldap_command("-y")
+		except ErrorReturnCode:
+			# some error happened
+			retCode = False
+		return retCode
 

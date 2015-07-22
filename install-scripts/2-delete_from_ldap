@@ -33,8 +33,7 @@ ldap2xml() {
  
 
 # more checks
-
-user_confirmation "This script deletes from ldap server all users tagged as 'deleted' ('borrado = 1') in mySQL itaca.alumnos table"
+[ "$1" = "-y" ] || user_confirmation "This script deletes from ldap server all users tagged as 'deleted' ('borrado = 1') in mySQL itaca.alumnos table"
 
 #Paso 2 
 # extraer en una tabla a los alumnos existentes en el LDAP (login con formato a[[:digit:]]+).Tabla ldap_tmp

@@ -27,7 +27,7 @@ gen_login(){
 }
 
 
-user_confirmation "This script adds to ldap server all users tagged as 'new' ('alta = 1') in mySQL itaca.alumnos table"
+[ "$1" = "-y" ] || user_confirmation "This script adds to ldap server all users tagged as 'new' ('alta = 1') in mySQL itaca.alumnos table"
  
 TMP_FILE="$(tempfile)"
 TMP_FILE2="$(tempfile)"
