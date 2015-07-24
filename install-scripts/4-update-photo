@@ -13,7 +13,7 @@ NOIMAGE="NOBODY.jpg"
 #convertir a uppercase
 
 # thanks to http://unix.stackexchange.com/questions/84229/change-filename-from-lowercase-to-uppercase-recursively
-( cd $IMAGE_DIR; rename 's/^([^.]*)\.(.*)$/\U$1\L.$2/' *; )
+( cd $IMAGE_DIR; rename 's/^([^.]*)\.(.*)$/\U$1\L.$2/' *.jpg; )
 
 chmod 664 $IMAGE_DIR/*
 chown datastore:datastore $IMAGE_DIR/*
@@ -36,14 +36,14 @@ TMP_FILE2="$(tempfile)"
 #mysql -N -B -e "use itaca; select DNI_NORM from alumnos where borrado='0' ;" > $TMP_FILE
 mysql -N -B -e "use itaca; select DNI_NORM from alumnos ;" > $TMP_FILE
 
-ls -1 $IMAGE_DIR/*.jpg 2>/dev/null | while read F; do
+ls -1 $IMAGE_DIR/*.jpg 2>/dev/null | grep -v "$NOIMAGE" |while read F; do
 	f="$(basename "$F" ".jpg")"
 	if ! grep -Fxq "$f" $TMP_FILE ; then
 		echo "$f" >> $TMP_FILE2
 	fi
 done
 
-cat $TMP_FILE2
+#cat $TMP_FILE2
 
 # import to mysql ...
 IMPORT_SQL="use itaca; delete from fotos_huerfanas; load data local infile '$TMP_FILE2' into table fotos_huerfanas;"

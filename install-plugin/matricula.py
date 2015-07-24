@@ -82,3 +82,34 @@ class matricula(datastore.datastore_plugin):
 			retCode = False
 		return retCode
 
+
+	def update_photos(self):
+		retCode = True
+		update_photos_command = sh.Command("/usr/share/ds-matricula-plugin/matricula-common-scripts/4-update-photo")
+		try:
+			update_photos_command()
+		except ErrorReturnCode:
+			# some error happened
+			retCode = False
+		return retCode
+
+	def update_csv_files(self):
+		retCode = True
+		update_csv_files_command = sh.Command("/usr/share/ds-matricula-plugin/matricula-common-scripts/5-update-csv")
+		try:
+			update_csv_files_command()
+		except ErrorReturnCode:
+			# some error happened
+			retCode = False
+		return retCode
+
+	def reset_password(self, login):
+		retCode = True
+		reset_password_command = sh.Command("/usr/share/ds-matricula-plugin/matricula-common-scripts/reset_password")
+		try:
+			reset_password_command(login)
+		except ErrorReturnCode:
+			# some error happened
+			retCode = False
+		return retCode
+
