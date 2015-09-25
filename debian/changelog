@@ -1,5 +1,11 @@
+ds-matricula-plugin (0.2) trusty; urgency=medium
+
+  * Resynced with 'ausias-user-manager' to fix the "empty login" bug
+
+ -- Luis Antonio Garcia Gisbert <luisgg@gmail.com>  Fri, 25 Sep 2015 14:19:42 +0200
+
 ds-matricula-plugin (0.1) trusty; urgency=medium
 
   * Initial release.
-  * 
+
  -- Luis Antonio Garcia Gisbert <luisgg@gmail.com>  Mon, 20 Jul 2015 13:50:15 +0200
